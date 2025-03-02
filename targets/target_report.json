@@ -1,0 +1,7 @@
+[
+  {
+      "Id": "CreateDailyReportTarget",
+      "Arn": "arn:aws:lambda:us-east-1:000000000000:function:createDailyReport",
+      "RoleArn": "arn:aws:iam::000000000000:role/LambdaAndKinesisRole"
+  }
+]

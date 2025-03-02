@@ -1,0 +1,33 @@
+{
+    "0": {
+        "roomID": "0",
+        "temperature": "22",
+        "humidity": "40",
+        "light": "500",
+        "co2": "650",
+        "lightStatus": "on",
+        "acStatus": "off",
+        "ventilationStatus": "off"
+    },
+    "1": {
+        "roomID": "1",
+        "temperature": "21",
+        "humidity": "35",
+        "light": "450",
+        "co2": "700",
+        "lightStatus": "off",
+        "acStatus": "off",
+        "ventilationStatus": "on"
+    },
+    "2": {
+        "roomID": "2",
+        "temperature": "19",
+        "humidity": "30",
+        "light": "400",
+        "co2": "600",
+        "lightStatus": "on",
+        "acStatus": "on",
+        "ventilationStatus": "off"
+    },
+    "created_at": "Wed 29 Jan 2025, 23:39"
+}
