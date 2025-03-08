@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 import boto3
 
 # Load environment variables
@@ -20,7 +20,7 @@ S3_BUCKET = os.getenv("S3_BUCKET", "smartpotsystem-s3-bucket")
 DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE")
 SQS_ALERTS_QUEUE = os.getenv("SQS_ALERTS_QUEUE")
 RAW_FOLDER = "raw/"
-REPORT_FOLDER = "manual_reports/"
+REPORT_FOLDER = "reports/manual/"
 
 def calculate_average(values):
     """Calculates the average ignoring 'ERR' values."""
@@ -35,7 +35,6 @@ def get_event_data(smartpot_id):
         obj = s3.get_object(Bucket=S3_BUCKET, Key=event_file_path)
         return json.loads(obj["Body"].read().decode("utf-8"))
     except s3.exceptions.NoSuchKey:
-        print(f"ℹ️ No event file found for {smartpot_id}. Initializing with empty values.")
         return {
             "sensor_errors": 0,
             "temperature_high": 0,
@@ -46,48 +45,59 @@ def get_event_data(smartpot_id):
         }
 
 def generate_manual_report(smartpot_id, start_hour, end_hour):
-    """Generates a manual report for a given time range."""
-    current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """Generates a manual report for a given time range, handling multi-day intervals."""
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    previous_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Determinare se il range attraversa la mezzanotte
+    if start_hour > end_hour:
+        dates_to_check = [previous_date, current_date]  # Controlla ieri e oggi
+    else:
+        dates_to_check = [current_date]  # Controlla solo oggi
+
     start_time = datetime.strptime(f"{current_date} {start_hour}:00:00", "%Y-%m-%d %H:%M:%S")
     end_time = datetime.strptime(f"{current_date} {end_hour}:00:00", "%Y-%m-%d %H:%M:%S")
 
-    if start_hour >= end_hour:
-        raise ValueError("Start hour must be before end hour.")
-    
     report_data = {
         "smartpot_id": smartpot_id,
-        "date": current_date,
+        "date_range": dates_to_check,
         "time_range": f"{start_hour}:00 - {end_hour}:00",
         "temperature": [],
         "humidity": [],
         "soil_moisture": []
     }
 
-    # Retrieve list of RAW files from S3
-    raw_files = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=RAW_FOLDER)
-
-    if "Contents" not in raw_files:
-        print(f"⚠️ No raw data found for {smartpot_id}. Report not generated.")
-        return False  # Indica che il report non è stato generato
-
     data_found = False
-    for file in raw_files["Contents"]:
-        file_key = file["Key"]
-        if not file_key.endswith(".json"):
-            continue
 
-        # Download file from S3
-        file_obj = s3.get_object(Bucket=S3_BUCKET, Key=file_key)
-        data = json.loads(file_obj["Body"].read().decode("utf-8"))
+    for date in dates_to_check:
+        file_key = f"{RAW_FOLDER}{date}/{smartpot_id}.json"
 
-        # Process only the relevant SmartPot data
-        for record in data:
-            if record.get("smartpot_id") != smartpot_id:
-                continue
+        try:
+            file_obj = s3.get_object(Bucket=S3_BUCKET, Key=file_key)
+            data = json.loads(file_obj["Body"].read().decode("utf-8"))
 
-            record_time = datetime.strptime(record["timestamp"], "%Y-%m-%d %H:%M:%S")
-            if start_time <= record_time <= end_time:
-                data_found = True
+            for record in data:
+                if record.get("smartpot_id") != smartpot_id:
+                    continue
+
+                if "measure_date" not in record:
+                    print(f"⚠️ Missing 'measure_date' in record: {record}")
+                    continue
+
+                record_time = datetime.strptime(record["measure_date"], "%Y-%m-%d %H:%M:%S")
+
+                # Se il record appartiene a ieri, aggiornare il corretto start_time
+                if date == previous_date and start_hour > end_hour:
+                    adjusted_start_time = datetime.strptime(f"{previous_date} {start_hour}:00:00", "%Y-%m-%d %H:%M:%S")
+                    adjusted_end_time = datetime.strptime(f"{current_date} {end_hour}:00:00", "%Y-%m-%d %H:%M:%S")
+
+                    if adjusted_start_time <= record_time or record_time < adjusted_end_time:
+                        data_found = True
+                else:
+                    if start_time <= record_time < end_time:
+                        data_found = True
+
+                # Aggiungere i dati validi
                 if "temperature" in record and record["temperature"] != "ERR":
                     report_data["temperature"].append(float(record["temperature"]))
                 if "humidity" in record and record["humidity"] != "ERR":
@@ -95,20 +105,16 @@ def generate_manual_report(smartpot_id, start_hour, end_hour):
                 if "soil_moisture" in record and record["soil_moisture"] != "ERR":
                     report_data["soil_moisture"].append(float(record["soil_moisture"]))
 
+        except s3.exceptions.NoSuchKey:
+            print(f"⚠️ No data found for {smartpot_id} on {date}")
+
     if not data_found:
-        print(f"⚠️ No data found in the selected time range for {smartpot_id}. Sending SQS alert.")
-        alert_message = {
-            "smartpot_id": smartpot_id if smartpot_id else "ALL",
-            "issue": "manual_report",
-            "details": {"message": f"⚠️ No valid data found for {smartpot_id} in time range {start_hour}:00 - {end_hour}:00. Unable to generate report."}
-        }
-        sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=json.dumps(alert_message))
-        return False  # Indica che il report non è stato generato
+        return None
 
     # Calculate averages
     report = {
         "smartpot_id": smartpot_id,
-        "date": current_date,
+        "date_range": dates_to_check,
         "time_range": f"{start_hour}:00 - {end_hour}:00",
         "avg_temperature": calculate_average(report_data["temperature"]),
         "avg_humidity": calculate_average(report_data["humidity"]),
@@ -119,25 +125,7 @@ def generate_manual_report(smartpot_id, start_hour, end_hour):
     event_data = get_event_data(smartpot_id)
     report.update(event_data)
 
-    # Save the report to S3
-    report_filename = f"{REPORT_FOLDER}manual_report_{smartpot_id}_{start_hour}-{end_hour}_{current_date}.json"
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=report_filename,
-        Body=json.dumps(report, indent=4)
-    )
-
-    print(f"✅ Manual report generated: {report_filename}")
-
-    # Send notification via handleAlerts
-    alert_message = {
-        "smartpot_id": smartpot_id if smartpot_id else "ALL",
-        "issue": "manual_report",
-        "details": {"message": f"📄 Manual report successfully generated for {smartpot_id} ({start_hour}:00 - {end_hour}:00)."}
-    }
-    sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=json.dumps(alert_message))
-    
-    return True  # Indica che il report è stato generato
+    return report
 
 def lambda_handler(event, context):
     """AWS Lambda handler function to create the manual report."""
@@ -150,27 +138,43 @@ def lambda_handler(event, context):
         start_hour = int(body.get("start_hour"))
         end_hour = int(body.get("end_hour"))
 
-        if start_hour >= end_hour:
+        if start_hour == end_hour:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "Start hour must be before end hour."})
+                "body": json.dumps({"error": "Start hour and end hour cannot be the same."})
             }
 
-        generated = False
-        if smartpot_id:
-            generated = generate_manual_report(smartpot_id, start_hour, end_hour)
+        reports = []
+
+        if smartpot_id and smartpot_id != "All":
+            report = generate_manual_report(smartpot_id, start_hour, end_hour)
+            if report:
+                reports.append(report)
+                report_filename = f"{REPORT_FOLDER}manual_report_{smartpot_id}_{start_hour}-{end_hour}_{datetime.now().strftime('%Y-%m-%d')}.json"
         else:
-            print("ℹ️ No smartpot_id provided, generating reports for all SmartPots.")
-            for smartpot in ["Fragola", "Basilico"]:  # Estendibile con altri SmartPots
-                generated |= generate_manual_report(smartpot, start_hour, end_hour)
+            print("ℹ️ Generating reports for all SmartPots.")
+            for smartpot in ["Fragola", "Basilico"]:
+                report = generate_manual_report(smartpot, start_hour, end_hour)
+                if report:
+                    reports.append(report)
+
+            report_filename = f"{REPORT_FOLDER}manual_report_All_{start_hour}-{end_hour}_{datetime.now().strftime('%Y-%m-%d')}.json"
+
+        if not reports:
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"error": "No valid data found for the requested time range."})
+            }
+
+        # Save report to S3
+        s3.put_object(Bucket=S3_BUCKET, Key=report_filename, Body=json.dumps(reports, indent=4))
 
         return {
-            "statusCode": 200 if generated else 500,
-            "body": json.dumps("Manual report successfully generated." if generated else "No valid data found for the requested time range.")
+            "statusCode": 200,
+            "body": json.dumps(report_filename)
         }
 
     except Exception as e:
-        print(f"❌ Error in createManualReport: {e}")
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})

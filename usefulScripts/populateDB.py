@@ -22,7 +22,7 @@ POTS_DATA = [
         "humidity": {"S": "70"},
         "soil_moisture": {"S": "65"},
         "last_irrigation": {"S": "2025-02-23 13:20:00"},
-        "measure_date": {"S": datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        "measure_date": {"S": "2025-02-23 11:30:00"}
     },
     {
         "smartpot_id": {"S": "Basilico"},
@@ -30,7 +30,7 @@ POTS_DATA = [
         "humidity": {"S": "60"},
         "soil_moisture": {"S": "55"},
         "last_irrigation": {"S": "2025-02-23 11:30:00"},
-        "measure_date": {"S": datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        "measure_date": {"S": "2025-02-23 11:30:00"}
     }
 ]
 

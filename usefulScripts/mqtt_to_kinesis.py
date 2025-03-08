@@ -27,11 +27,11 @@ def send_to_kinesis(smartpot_id):
         "soil_moisture": sensor_data[smartpot_id]["soil_moisture"]
     })
 
-    print(f"🚀 Sending to Kinesis: {kinesis_payload}")
+    print(f"Sending to Kinesis: {kinesis_payload}")
     try:
         kinesis_client.put_record(StreamName=KINESIS_STREAM_NAME, PartitionKey=smartpot_id, Data=kinesis_payload)
     except Exception as e:
-        print(f"❌ Error sending to Kinesis: {e}")
+        print(f"Error sending to Kinesis: {e}")
 
     # Reset dati per il prossimo ciclo
     sensor_data[smartpot_id] = {"temperature": None, "humidity": None, "soil_moisture": None}
@@ -44,25 +44,22 @@ def on_message(client, userdata, message):
 
         if message.topic.endswith("_Temp"):
             sensor_data[smartpot_id]["temperature"] = payload["temperature"]
-            print(f"🌡 Received temperature: {payload['temperature']} from {smartpot_id}")
         elif message.topic.endswith("_Hum"):
             sensor_data[smartpot_id]["humidity"] = payload["humidity"]
-            print(f"💧 Received humidity: {payload['humidity']} from {smartpot_id}")
         elif message.topic.endswith("_Soil"):
             sensor_data[smartpot_id]["soil_moisture"] = payload["soil_moisture"]
-            print(f"🪴 Received soil moisture: {payload['soil_moisture']} from {smartpot_id}")
 
         # Se tutti i valori sono disponibili, invia a Kinesis
         if None not in sensor_data[smartpot_id].values():
             send_to_kinesis(smartpot_id)
 
     except Exception as e:
-        print(f"❌ Error processing MQTT message: {e}")
+        print(f"Error processing MQTT message: {e}")
 
 # Funzione callback per la connessione al broker MQTT
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("✅ Connected to MQTT Broker")
+        print("Connected to MQTT Broker")
         # Sottoscrizione ai topic per entrambi i vasi
         for plant in ["Fragola", "Basilico"]:
             client.subscribe(f"{plant}_Temp")
@@ -73,14 +70,14 @@ def on_connect(client, userdata, flags, rc):
 
 # Funzione callback per gestire disconnessioni
 def on_disconnect(client, userdata, rc):
-    print("❌ Disconnected from MQTT Broker. Attempting to reconnect...")
+    print("Disconnected from MQTT Broker. Attempting to reconnect...")
     while True:
         try:
             client.reconnect()
-            print("🔄 Reconnected to MQTT Broker!")
+            print("Reconnected to MQTT Broker!")
             return
         except Exception as e:
-            print(f"⚠️ Reconnection failed: {e}. Retrying in 5 seconds...")
+            print(f"Reconnection failed: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
 # Configura il client MQTT
@@ -92,9 +89,9 @@ client.on_disconnect = on_disconnect
 # Loop per mantenere il client sempre in ascolto
 while True:
     try:
-        print("🔗 Connecting to MQTT Broker...")
+        print("Connecting to MQTT Broker...")
         client.connect("localhost", 1883, 60)
         client.loop_forever()
     except Exception as e:
-        print(f"❌ Connection error: {e}. Retrying in 5 seconds...")
+        print(f"Connection error: {e}. Retrying in 5 seconds...")
         time.sleep(5)

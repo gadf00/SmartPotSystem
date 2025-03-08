@@ -103,65 +103,91 @@ def get_report_by_number(message: telebot.types.Message, reports: list):
         bot.send_message(message.chat.id, "❌ Please enter a valid number.")
     send_welcome(message)
 
-# **Create Manual Report**
+# **Selezione SmartPot per Report Manuale**
 def create_manual_report_handler(message: telebot.types.Message):
-    bot.send_message(message.chat.id, "Enter the **SmartPot ID** (leave empty for all):")
-    bot.register_next_step_handler(message, ask_manual_report_hours)
+    """Mostra i pulsanti per scegliere tra Basilico, Fragola o Tutti."""
+    markup = types.ReplyKeyboardMarkup(row_width=2, one_time_keyboard=True)
+    buttons = [types.KeyboardButton(sp) for sp in ["Basilico", "Fragola", "All"]]
+    markup.add(*buttons)
 
-def ask_manual_report_hours(message: telebot.types.Message):
+    sent_msg = bot.send_message(message.chat.id, "🪴 **Seleziona il tipo di SmartPot:**", reply_markup=markup)
+    bot.register_next_step_handler(sent_msg, ask_manual_report_start_hour)
+
+# **Selezione Start Hour**
+def ask_manual_report_start_hour(message: telebot.types.Message):
+    """Mostra i pulsanti per selezionare l'ora di inizio."""
     smartpot_id = message.text.strip()
-    bot.send_message(message.chat.id, "Enter the **start hour (0-23)** for the report:")
-    bot.register_next_step_handler(message, ask_end_hour, smartpot_id)
+    
+    markup = types.ReplyKeyboardMarkup(row_width=6, one_time_keyboard=True)
+    buttons = [types.KeyboardButton(str(hour)) for hour in range(24)]
+    markup.add(*buttons)
 
-def ask_end_hour(message: telebot.types.Message, smartpot_id: str):
+    sent_msg = bot.send_message(message.chat.id, "⏳ **Seleziona l'ora di inizio (0-23):**", reply_markup=markup)
+    bot.register_next_step_handler(sent_msg, ask_manual_report_end_hour, smartpot_id)
+
+# **Selezione End Hour**
+def ask_manual_report_end_hour(message: telebot.types.Message, smartpot_id: str):
+    """Mostra i pulsanti per selezionare l'ora di fine."""
     try:
         start_hour = int(message.text)
-        if 0 <= start_hour <= 23:
-            bot.send_message(message.chat.id, "Enter the **end hour (1-24)** for the report:")
-            bot.register_next_step_handler(message, create_manual_report, smartpot_id, start_hour)
-        else:
-            bot.send_message(message.chat.id, "❌ Please enter a valid start hour (0-23).")
-            create_manual_report_handler(message)
     except ValueError:
-        bot.send_message(message.chat.id, "❌ Please enter a valid number.")
-        create_manual_report_handler(message)
+        bot.send_message(message.chat.id, "❌ **Inserisci un numero valido tra 0 e 23!**")
+        return ask_manual_report_start_hour(message)
 
+    markup = types.ReplyKeyboardMarkup(row_width=6, one_time_keyboard=True)
+    buttons = [types.KeyboardButton(str(hour)) for hour in range(24)]
+    markup.add(*buttons)
+
+    sent_msg = bot.send_message(message.chat.id, "⏳ **Seleziona l'ora di fine (0-23):**", reply_markup=markup)
+    bot.register_next_step_handler(sent_msg, create_manual_report, smartpot_id, start_hour)
+
+# **Invio della richiesta al Server**
 def create_manual_report(message: telebot.types.Message, smartpot_id: str, start_hour: int):
+    """Invia la richiesta per creare il report manuale e gestisce la risposta."""
     try:
         end_hour = int(message.text)
-        if start_hour < end_hour <= 24:
-            payload = {
-                "smartpot_id": smartpot_id if smartpot_id else "", 
-                "start_hour": start_hour, 
-                "end_hour": end_hour
-            }
-            response = fetch_data("createManualReport", method="POST", payload=payload)
+        if start_hour == end_hour:
+            raise ValueError("Start and end hour cannot be the same.")
 
-            if response and "Manual report successfully generated." in response:
-                bot.send_message(message.chat.id, "✅ Manual report successfully generated!")
-            else:
-                bot.send_message(message.chat.id, "❌ Error generating manual report.")
+        payload = {
+            "smartpot_id": smartpot_id,
+            "start_hour": start_hour,
+            "end_hour": end_hour
+        }
+        response = fetch_data("createManualReport", method="POST", payload=payload)
+
+        # **LOG: Stampa la risposta della Lambda**
+        print(f"🛠️ Response from createManualReport Lambda: {response}")
+
+        if response and isinstance(response, str):  # Il nome del file viene restituito come stringa
+            bot.send_message(message.chat.id, f"✅ **Manual report successfully generated!**\n📄 File: `{response}`", parse_mode="Markdown")
         else:
-            bot.send_message(message.chat.id, "❌ End hour must be greater than start hour and <= 24.")
-            create_manual_report_handler(message)
+            bot.send_message(message.chat.id, "📛 **Errore: Nessun dato disponibile per il range di ore selezionato!**")
+
     except ValueError:
-        bot.send_message(message.chat.id, "❌ Please enter a valid number.")
+        bot.send_message(message.chat.id, "❌ **L'ora di fine deve essere diversa da start hour!**")
         create_manual_report_handler(message)
 
+    send_welcome(message)
+        
 # **Irrigate Now**
 def irrigate_now_handler(message: telebot.types.Message):
-    bot.send_message(message.chat.id, "Enter the **Pot ID** (e.g., Fragola, Basilico):")
+    """Mostra i pulsanti per selezionare il vaso."""
+    markup = types.ReplyKeyboardMarkup(row_width=2, one_time_keyboard=True)
+    buttons = [
+        types.KeyboardButton("Basilico"),
+        types.KeyboardButton("Fragola"),
+    ]
+    markup.add(*buttons)
+    
+    bot.send_message(message.chat.id, "💧 Select the pot for the irrigation:", reply_markup=markup)
     bot.register_next_step_handler(message, irrigate_now)
 
 def irrigate_now(message: telebot.types.Message):
     smartpot_id = message.text.capitalize()
     payload = {"smartpot_id": smartpot_id}
-    response = fetch_data("irrigateNow", method="POST", payload=payload)
-
-    if response:
-        bot.send_message(message.chat.id, f"💦 Irrigation started for {smartpot_id}.")
-    else:
-        bot.send_message(message.chat.id, "❌ Error starting irrigation.")
+    bot.send_message(message.chat.id,f"💧 Sent irrigation trigger for {smartpot_id}")
+    fetch_data("irrigateNow", method="POST", payload=payload)
     send_welcome(message)
 
 # **Command Handlers**
@@ -187,7 +213,7 @@ def send_welcome(message: telebot.types.Message):
         'Create manual report'
     ]
     markup.add(*buttons)
-    sent_msg = bot.send_message(message.chat.id, "🛠 What would you like to do?", reply_markup=markup)
+    sent_msg = bot.send_message(message.chat.id, "🛠️ What would you like to do?", reply_markup=markup)
     bot.register_next_step_handler(sent_msg, action_handler)
 
 bot.infinity_polling()

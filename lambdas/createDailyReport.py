@@ -54,7 +54,7 @@ def get_event_data(smartpot_id):
 
 def generate_daily_report():
     """Generates a daily report based on the raw data available in S3, grouped by SmartPot."""
-    current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    current_date = datetime.now().strftime("%Y-%m-%d")
     report_data = {}
 
     # Retrieve all RAW files from S3

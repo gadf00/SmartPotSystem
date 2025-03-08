@@ -38,13 +38,15 @@ PLANT_LIMITS = {
         "temperature_min_day": 18, "temperature_max_day": 25,
         "temperature_min_night": 8, "temperature_max_night": 15,
         "humidity_min": 60, "humidity_max": 80,
-        "soil_moisture_min": 50
+        "soil_moisture_min": 50,
+        "soil_moisture_max": 80
     },
     "Basilico": {
         "temperature_min_day": 20, "temperature_max_day": 30,
         "temperature_min_night": 10, "temperature_max_night": 15,
         "humidity_min": 50, "humidity_max": 70,
-        "soil_moisture_min": 40
+        "soil_moisture_min": 40,
+        "soil_moisture_max": 80
     }
 }
 
@@ -78,7 +80,7 @@ def save_to_s3(sensor_data: SensorData):
         print(f"⚠️ Skipping S3 save: ERR values detected for {sensor_data.smartpot_id}")
         return
     
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
     file_key = f"{RAW_DATA_FOLDER}/{today}/{sensor_data.smartpot_id}.json"
 
     new_entry = {
@@ -104,8 +106,9 @@ def check_and_trigger(sensor_data: SensorData):
     smartpot_id = sensor_data.smartpot_id
     limits = PLANT_LIMITS.get(smartpot_id, {})
 
-    # **Ottieni l'ora attuale (UTC+1)**
-    current_hour = datetime.now().hour
+
+    current_time = datetime.now()
+    current_hour = current_time.hour
     is_daytime = 8 <= current_hour < 20  # Giorno: 8:00 - 20:00
 
     # **Imposta i limiti di temperatura basati sull'orario**
@@ -177,14 +180,36 @@ def check_and_trigger(sensor_data: SensorData):
     try:
         soil_moisture_value = float(sensor_data.soil_moisture)
         if soil_moisture_value < limits["soil_moisture_min"]:
-            # **Se il valore è sotto il minimo, attiva l'irrigazione**
+            # **Verifica l'ultima irrigazione nel database**
+            try:
+                response = dynamodb.get_item(
+                    TableName=DYNAMODB_TABLE,
+                    Key={"smartpot_id": {"S": smartpot_id}},
+                    AttributesToGet=["last_irrigation"]
+                )
+                last_irrigation = response.get("Item", {}).get("last_irrigation", {}).get("S", None)
+
+                if last_irrigation:
+                    last_irrigation_time = datetime.strptime(last_irrigation, "%Y-%m-%d %H:%M:%S")  
+                    time_difference = (current_time - last_irrigation_time).total_seconds() / 60  # Differenza in minuti
+                    print(f"🕒 Last irrigation for {smartpot_id}: {last_irrigation_time}")
+                    print(f"⏳ Time since last irrigation: {time_difference:.1f} minutes")
+
+                    if time_difference < 5:
+                        print(f"⏳ Skipping irrigation for {smartpot_id}: Last irrigation was {time_difference:.1f} minutes ago.")
+                        return  # Evita l'irrigazione se non sono trascorsi 5 minuti
+
+            except Exception as e:
+                print(f"⚠️ Error retrieving last_irrigation for {smartpot_id}: {e}")
+
+            # **Se i 5 minuti sono passati, attiva l'irrigazione**
             irrigation_msg = json.dumps({
                 "smartpot_id": smartpot_id
             })
             sqs.send_message(QueueUrl=SQS_IRRIGATION_QUEUE, MessageBody=irrigation_msg)
             print(f"💧 Sent irrigation trigger for {smartpot_id}")
 
-        elif soil_moisture_value > limits["soil_moisture_min"] + 10:  # Imposta un valore di sicurezza per il massimo
+        elif soil_moisture_value > limits["soil_moisture_max"]:
             # **Se il valore è troppo alto, invia un alert**
             alert_msg = json.dumps({
                 "smartpot_id": smartpot_id,

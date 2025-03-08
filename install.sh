@@ -135,7 +135,7 @@ echo "\nCreating EventBridge Rule for Daily Report"
 
 awslocal events put-rule \
     --name scheduled-daily-report \
-    --schedule-expression 'cron(30 12 * * ? *)' \
+    --schedule-expression 'cron(50 12 * * ? *)' \
     --region $region
 
 awslocal lambda add-permission \
@@ -171,8 +171,8 @@ for endpoint in "${!api_endpoints[@]}"; do
     output_resource=$(awslocal apigateway create-resource --rest-api-id $api_id --parent-id $parent_id --path-part $endpoint --region $region)
     resource_id=$(echo $output_resource | jq -r '.id')
 
-    # Crea il metodo GET per tutti gli endpoint tranne "irrigateNow" che deve usare POST
-    if [ "$endpoint" == "irrigateNow" || "$endpoint" == "createManualReport" ]; then
+    # ✅ Assegna il metodo POST solo a "irrigateNow" e "createManualReport"
+    if [[ "$endpoint" == "irrigateNow" || "$endpoint" == "createManualReport" ]]; then
         method="POST"
     else
         method="GET"
@@ -195,6 +195,7 @@ for endpoint in "${!api_endpoints[@]}"; do
         --passthrough-behavior WHEN_NO_MATCH
 done
 
+
 # Deploy API Gateway
 echo "\nDeploying API Gateway"
 awslocal apigateway create-deployment \
@@ -216,8 +217,9 @@ for function_name in "${api_endpoints[@]}"; do
         --statement-id "AllowAPIGatewayInvoke-$function_name" \
         --action lambda:InvokeFunction \
         --principal apigateway.amazonaws.com \
-        --source-arn "arn:aws:execute-api:$region:*:$api_id/test/*/$function_name"
+        --source-arn "arn:aws:execute-api:$region:*:$api_id/test/*"
 done
+
 
 
 # **Deploy API Gateway**

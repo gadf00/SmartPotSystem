@@ -38,6 +38,47 @@ def send_telegram_message(message_text):
     except Exception as e:
         print(f"❌ Error sending Telegram notification: {e}")
 
+def get_current_event_counts(smartpot_id):
+    """Retrieves the current event counts from S3 for a specific SmartPot."""
+    event_file_path = f"events/daily_events_{smartpot_id}.json"
+
+    try:
+        obj = s3.get_object(Bucket=S3_BUCKET, Key=event_file_path)
+        return json.loads(obj["Body"].read().decode("utf-8"))
+    except s3.exceptions.NoSuchKey:
+        print(f"ℹ️ No existing event file found for {smartpot_id}. Initializing new event count file.")
+        return {
+            "sensor_errors": 0,
+            "temperature_high": 0,
+            "temperature_low": 0,
+            "humidity_high": 0,
+            "humidity_low": 0,
+            "soil_moisture_high": 0,
+            "irrigation_triggered": 0
+        }
+
+def update_event_count(smartpot_id, alert_type):
+    """Updates the event count in S3 based on the alert type for a specific SmartPot."""
+    event_file_path = f"events/daily_events_{smartpot_id}.json"
+    event_counts = get_current_event_counts(smartpot_id)
+
+    event_mapping = {
+        "sensor_error": "sensor_errors",
+        "temperature_high": "temperature_high",
+        "temperature_low": "temperature_low",
+        "humidity_high": "humidity_high",
+        "humidity_low": "humidity_low",
+        "soil_moisture_high": "soil_moisture_high",
+        "irrigation_triggered": "irrigation_triggered"
+    }
+
+    if alert_type in event_mapping:
+        event_counts[event_mapping[alert_type]] += 1
+        print(f"🔄 Updated event count for {smartpot_id}: {event_mapping[alert_type]} -> {event_counts[event_mapping[alert_type]]}")
+
+    s3.put_object(Bucket=S3_BUCKET, Key=event_file_path, Body=json.dumps(event_counts))
+    print(f"✅ Event counts updated in S3 for {smartpot_id} at {event_file_path}")
+
 def process_alert(alert_message):
     """Processes the alert message received from SQS and sends a Telegram notification."""
     smartpot_id = alert_message.get("smartpot_id", "ALL")
@@ -72,12 +113,17 @@ def process_alert(alert_message):
         elif alert_type == "irrigation_triggered":
             message = f"💧 Irrigation activated for SmartPot {smartpot_id}."
         
-        elif alert_type == "soil_moisture_high":
-            message = f"⚠️ High soil moisture alert in SmartPot {smartpot_id}.\n🌱 Moisture Level: {details.get('soil_moisture', 'N/A')}% (Above max limit)."
+        elif alert_type == "irrigation_completed":
+            message = f"💧 Irrigation completed for SmartPot {smartpot_id}."
 
+        elif alert_type == "soil_moisture_high":
+            message = f"🌱 High soil moisture alert in SmartPot {smartpot_id}.\n💧 Moisture Level: {details.get('soil_moisture', 'N/A')}% (Above max limit)."
 
         else:
             message = f"ℹ️ Notification received for SmartPot {smartpot_id}: {alert_type}"
+
+    # **Aggiorna il contatore dell'evento**
+    update_event_count(smartpot_id, alert_type)
 
     # **Invio del messaggio Telegram**
     send_telegram_message(message)
