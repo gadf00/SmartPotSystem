@@ -36,7 +36,7 @@ RAW_DATA_FOLDER = "raw"
 PLANT_LIMITS = {
     "Strawberry": {
         "temperature_min": 18, "temperature_max": 30,
-        "humidity_min": 60, "humidity_max": 80,
+        "humidity_min": 50, "humidity_max": 80,
         "soil_moisture_min": 50, "soil_moisture_max": 80
     },
     "Basil": {
