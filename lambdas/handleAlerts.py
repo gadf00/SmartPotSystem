@@ -3,7 +3,7 @@ import os
 import time
 import boto3
 import urllib3
-from datetime import datetime, timezone
+from datetime import datetime
 
 # Load environment variables
 LOCALSTACK_HOSTNAME = os.getenv("LOCALSTACK_HOSTNAME", "localhost")
@@ -38,46 +38,24 @@ def send_telegram_message(message_text):
     except Exception as e:
         print(f"❌ Error sending Telegram notification: {e}")
 
-def get_current_event_counts(smartpot_id):
-    """Retrieves the current event counts from S3 for a specific SmartPot."""
+def save_event(smartpot_id, alert_type):
+    """Saves an event with a timestamp in S3 for a specific SmartPot."""
     event_file_path = f"events/daily_events_{smartpot_id}.json"
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
+        # Retrieve existing event file
         obj = s3.get_object(Bucket=S3_BUCKET, Key=event_file_path)
-        return json.loads(obj["Body"].read().decode("utf-8"))
+        events = json.loads(obj["Body"].read().decode("utf-8"))
     except s3.exceptions.NoSuchKey:
-        print(f"ℹ️ No existing event file found for {smartpot_id}. Initializing new event count file.")
-        return {
-            "sensor_errors": 0,
-            "temperature_high": 0,
-            "temperature_low": 0,
-            "humidity_high": 0,
-            "humidity_low": 0,
-            "soil_moisture_high": 0,
-            "irrigation_triggered": 0
-        }
+        events = []
 
-def update_event_count(smartpot_id, alert_type):
-    """Updates the event count in S3 based on the alert type for a specific SmartPot."""
-    event_file_path = f"events/daily_events_{smartpot_id}.json"
-    event_counts = get_current_event_counts(smartpot_id)
+    # Append new event
+    events.append({"timestamp": current_time, "event_type": alert_type})
 
-    event_mapping = {
-        "sensor_error": "sensor_errors",
-        "temperature_high": "temperature_high",
-        "temperature_low": "temperature_low",
-        "humidity_high": "humidity_high",
-        "humidity_low": "humidity_low",
-        "soil_moisture_high": "soil_moisture_high",
-        "irrigation_triggered": "irrigation_triggered"
-    }
-
-    if alert_type in event_mapping:
-        event_counts[event_mapping[alert_type]] += 1
-        print(f"🔄 Updated event count for {smartpot_id}: {event_mapping[alert_type]} -> {event_counts[event_mapping[alert_type]]}")
-
-    s3.put_object(Bucket=S3_BUCKET, Key=event_file_path, Body=json.dumps(event_counts))
-    print(f"✅ Event counts updated in S3 for {smartpot_id} at {event_file_path}")
+    # Save updated events to S3
+    s3.put_object(Bucket=S3_BUCKET, Key=event_file_path, Body=json.dumps(events))
+    print(f"✅ Event saved in S3 for {smartpot_id}: {alert_type} at {current_time}")
 
 def process_alert(alert_message):
     """Processes the alert message received from SQS and sends a Telegram notification."""
@@ -122,8 +100,8 @@ def process_alert(alert_message):
         else:
             message = f"ℹ️ Notification received for SmartPot {smartpot_id}: {alert_type}"
 
-    # **Aggiorna il contatore dell'evento**
-    update_event_count(smartpot_id, alert_type)
+    # **Salva l'evento con timestamp**
+    save_event(smartpot_id, alert_type)
 
     # **Invio del messaggio Telegram**
     send_telegram_message(message)

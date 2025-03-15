@@ -11,13 +11,11 @@ AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 
 # AWS Clients
 ENDPOINT_URL = f"http://{LOCALSTACK_HOSTNAME}:{EDGE_PORT}"
-dynamodb = boto3.client("dynamodb", endpoint_url=ENDPOINT_URL, region_name=AWS_REGION)
 s3 = boto3.client("s3", endpoint_url=ENDPOINT_URL, region_name=AWS_REGION)
 sqs = boto3.client("sqs", endpoint_url=ENDPOINT_URL, region_name=AWS_REGION)
 
 # Configurations
 S3_BUCKET = os.getenv("S3_BUCKET", "smartpotsystem-s3-bucket")
-DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE")
 SQS_ALERTS_QUEUE = os.getenv("SQS_ALERTS_QUEUE")
 RAW_FOLDER = "raw/"
 REPORT_FOLDER = "reports/manual/"
@@ -27,13 +25,13 @@ def calculate_average(values):
     numeric_values = [v for v in values if isinstance(v, (int, float))]
     return round(sum(numeric_values) / len(numeric_values), 2) if numeric_values else None
 
-def get_event_data(smartpot_id):
-    """Retrieves the daily event data from S3 for a specific SmartPot."""
+def get_event_data(smartpot_id, start_time, end_time):
+    """Retrieves event data from S3 for a specific SmartPot within the given time range."""
     event_file_path = f"events/daily_events_{smartpot_id}.json"
 
     try:
         obj = s3.get_object(Bucket=S3_BUCKET, Key=event_file_path)
-        return json.loads(obj["Body"].read().decode("utf-8"))
+        events = json.loads(obj["Body"].read().decode("utf-8"))
     except s3.exceptions.NoSuchKey:
         return {
             "sensor_errors": 0,
@@ -41,8 +39,29 @@ def get_event_data(smartpot_id):
             "temperature_low": 0,
             "humidity_high": 0,
             "humidity_low": 0,
+            "soil_moisture_high": 0,
             "irrigation_triggered": 0
         }
+
+    # Filtra eventi nell'intervallo di tempo specificato
+    event_counts = {
+        "sensor_errors": 0,
+        "temperature_high": 0,
+        "temperature_low": 0,
+        "humidity_high": 0,
+        "humidity_low": 0,
+        "soil_moisture_high": 0,
+        "irrigation_triggered": 0
+    }
+
+    for event in events:
+        event_time = datetime.strptime(event["timestamp"], "%Y-%m-%d %H:%M:%S")
+        if start_time <= event_time < end_time:
+            event_type = event["event_type"]
+            if event_type in event_counts:
+                event_counts[event_type] += 1
+
+    return event_counts
 
 def generate_manual_report(smartpot_id, start_hour, end_hour):
     """Generates a manual report for a given time range, handling multi-day intervals."""
@@ -81,21 +100,12 @@ def generate_manual_report(smartpot_id, start_hour, end_hour):
                     continue
 
                 if "measure_date" not in record:
-                    print(f"⚠️ Missing 'measure_date' in record: {record}")
                     continue
 
                 record_time = datetime.strptime(record["measure_date"], "%Y-%m-%d %H:%M:%S")
 
-                # Se il record appartiene a ieri, aggiornare il corretto start_time
-                if date == previous_date and start_hour > end_hour:
-                    adjusted_start_time = datetime.strptime(f"{previous_date} {start_hour}:00:00", "%Y-%m-%d %H:%M:%S")
-                    adjusted_end_time = datetime.strptime(f"{current_date} {end_hour}:00:00", "%Y-%m-%d %H:%M:%S")
-
-                    if adjusted_start_time <= record_time or record_time < adjusted_end_time:
-                        data_found = True
-                else:
-                    if start_time <= record_time < end_time:
-                        data_found = True
+                if start_time <= record_time < end_time:
+                    data_found = True
 
                 # Aggiungere i dati validi
                 if "temperature" in record and record["temperature"] != "ERR":
@@ -122,7 +132,7 @@ def generate_manual_report(smartpot_id, start_hour, end_hour):
     }
 
     # Retrieve and include event data
-    event_data = get_event_data(smartpot_id)
+    event_data = get_event_data(smartpot_id, start_time, end_time)
     report.update(event_data)
 
     return report

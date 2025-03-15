@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 import boto3
 
 # Load environment variables
@@ -35,22 +35,33 @@ def delete_s3_folder(prefix):
         print(f"🗑️ Deleted {len(delete_keys)} objects from {prefix}")
 
 def get_event_data(smartpot_id):
-    """Retrieves the daily event data from S3 for a specific SmartPot."""
+    """Retrieves all event timestamps from S3 for a specific SmartPot."""
     event_file_path = f"{EVENTS_FOLDER}daily_events_{smartpot_id}.json"
 
     try:
         obj = s3.get_object(Bucket=S3_BUCKET, Key=event_file_path)
-        return json.loads(obj["Body"].read().decode("utf-8"))
+        event_records = json.loads(obj["Body"].read().decode("utf-8"))
     except s3.exceptions.NoSuchKey:
-        print(f"ℹ️ No event file found for {smartpot_id}. Initializing with empty values.")
-        return {
-            "sensor_errors": 0,
-            "temperature_high": 0,
-            "temperature_low": 0,
-            "humidity_high": 0,
-            "humidity_low": 0,
-            "irrigation_triggered": 0
-        }
+        print(f"ℹ️ No event file found for {smartpot_id}. Returning empty list.")
+        event_records = []
+
+    # Aggrega gli eventi in base al tipo
+    event_counts = {
+        "sensor_errors": 0,
+        "temperature_high": 0,
+        "temperature_low": 0,
+        "humidity_high": 0,
+        "humidity_low": 0,
+        "soil_moisture_high": 0,
+        "irrigation_triggered": 0
+    }
+
+    for event in event_records:
+        event_type = event.get("event_type")
+        if event_type in event_counts:
+            event_counts[event_type] += 1
+
+    return event_counts
 
 def generate_daily_report():
     """Generates a daily report based on the raw data available in S3, grouped by SmartPot."""
@@ -138,8 +149,10 @@ def generate_daily_report():
     }
     sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=json.dumps(alert_message))
 
-    # Delete all raw data
+    # Delete all raw data and event records
     delete_s3_folder(RAW_FOLDER)
+    delete_s3_folder(EVENTS_FOLDER)
+
     return True  # Indica che il report è stato generato
 
 def lambda_handler(event, context):
