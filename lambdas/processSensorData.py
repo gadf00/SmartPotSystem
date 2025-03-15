@@ -34,27 +34,24 @@ RAW_DATA_FOLDER = "raw"
 
 # Limits for plants
 PLANT_LIMITS = {
-    "Fragola": {
-        "temperature_min_day": 18, "temperature_max_day": 25,
-        "temperature_min_night": 8, "temperature_max_night": 15,
+    "Strawberry": {
+        "temperature_min": 18, "temperature_max": 30,
         "humidity_min": 60, "humidity_max": 80,
-        "soil_moisture_min": 50,
-        "soil_moisture_max": 80
+        "soil_moisture_min": 50, "soil_moisture_max": 80
     },
-    "Basilico": {
-        "temperature_min_day": 20, "temperature_max_day": 30,
-        "temperature_min_night": 10, "temperature_max_night": 15,
+    "Basil": {
+        "temperature_min": 15, "temperature_max": 30,
         "humidity_min": 50, "humidity_max": 70,
-        "soil_moisture_min": 40,
-        "soil_moisture_max": 80
+        "soil_moisture_min": 40, "soil_moisture_max": 80
     }
 }
 
 def save_to_dynamodb(sensor_data: SensorData):
-    """Saves sensor data to DynamoDB."""
+    """Saves sensor data into a DynamoDB table.
+       Uses an UPDATE operation to store the latest
+       measurement values for a given smartpot_id."""
     try:
-        print(f"📝 Saving data for {sensor_data.smartpot_id} in {DYNAMODB_TABLE}")
-
+        
         update_expression = "SET measure_date = :m, temperature = :t, humidity = :h, soil_moisture = :s"
         expression_values = {
             ":m": {"S": sensor_data.measure_date},
@@ -69,15 +66,15 @@ def save_to_dynamodb(sensor_data: SensorData):
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_values
         )
-        print(f"✅ Data saved to DynamoDB: {sensor_data}")
 
     except Exception as e:
-        print(f"❌ Error saving to DynamoDB: {e}")
+        print(f"Error saving to DynamoDB: {e}")
 
 def save_to_s3(sensor_data: SensorData):
-    """Saves raw sensor data to S3, excluding records with ERR values."""
+    """Saves raw sensor data into an S3 bucket, structured by date.
+       Skips records containing "ERR" values.
+       If the file for the day already exists, it appends the new entry."""
     if "ERR" in [sensor_data.temperature, sensor_data.humidity, sensor_data.soil_moisture]:
-        print(f"⚠️ Skipping S3 save: ERR values detected for {sensor_data.smartpot_id}")
         return
     
     today = datetime.now().strftime("%Y-%m-%d")
@@ -99,21 +96,11 @@ def save_to_s3(sensor_data: SensorData):
 
     existing_data.append(new_entry)
     s3.put_object(Bucket=S3_BUCKET, Key=file_key, Body=json.dumps(existing_data))
-    print(f"✅ Data saved to S3: {file_key}")
 
 def check_and_trigger(sensor_data: SensorData):
-    """Checks sensor values and triggers alerts based on time of day."""
+    """Checks if sensor values exceed defined thresholds and triggers alerts and irrigation."""
     smartpot_id = sensor_data.smartpot_id
     limits = PLANT_LIMITS.get(smartpot_id, {})
-
-
-    current_time = datetime.now()
-    current_hour = current_time.hour
-    is_daytime = 8 <= current_hour < 20  # Giorno: 8:00 - 20:00
-
-    # **Imposta i limiti di temperatura basati sull'orario**
-    temp_min = limits["temperature_min_night"] if not is_daytime else limits["temperature_min_day"]
-    temp_max = limits["temperature_max_night"] if not is_daytime else limits["temperature_max_day"]
 
     # **Gestione errori sensori**
     if "ERR" in [sensor_data.temperature, sensor_data.humidity, sensor_data.soil_moisture]:
@@ -127,38 +114,29 @@ def check_and_trigger(sensor_data: SensorData):
             }
         })
         sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=alert_msg)
-        print(f"🚨 Sent sensor error alert for {smartpot_id}: {alert_msg}")
         return  
 
     # **Gestione temperatura**
     try:
         temperature_value = float(sensor_data.temperature)
-        if temperature_value < temp_min:
+        if temperature_value < limits["temperature_min"]:
             alert_msg = json.dumps({
                 "smartpot_id": smartpot_id,
                 "issue": "temperature_low",
-                "details": {
-                    "temperature": sensor_data.temperature,
-                    "time_of_day": "night" if not is_daytime else "day"
-                }
+                "details": {"temperature": sensor_data.temperature}
             })
             sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=alert_msg)
-            print(f"⚠️ Sent low temperature alert for {smartpot_id}")
 
-        elif temperature_value > temp_max:
+        elif temperature_value > limits["temperature_max"]:
             alert_msg = json.dumps({
                 "smartpot_id": smartpot_id,
                 "issue": "temperature_high",
-                "details": {
-                    "temperature": sensor_data.temperature,
-                    "time_of_day": "night" if not is_daytime else "day"
-                }
+                "details": {"temperature": sensor_data.temperature}
             })
             sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=alert_msg)
-            print(f"⚠️ Sent high temperature alert for {smartpot_id}")
 
     except ValueError:
-        print(f"❌ Skipping temperature check for {smartpot_id}: Invalid value '{sensor_data.temperature}'")
+        print(f"Skipping temperature check for {smartpot_id}: Invalid value '{sensor_data.temperature}'")
 
     # **Gestione umidità**
     try:
@@ -171,10 +149,9 @@ def check_and_trigger(sensor_data: SensorData):
                 "details": {"humidity": sensor_data.humidity}
             })
             sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=alert_msg)
-            print(f"⚠️ Sent {alert_type} alert for {smartpot_id}")
 
     except ValueError:
-        print(f"❌ Skipping humidity check for {smartpot_id}: Invalid value '{sensor_data.humidity}'")
+        print(f"Skipping humidity check for {smartpot_id}: Invalid value '{sensor_data.humidity}'")
 
     # **Gestione soil moisture**
     try:
@@ -192,22 +169,17 @@ def check_and_trigger(sensor_data: SensorData):
                 if last_irrigation:
                     last_irrigation_time = datetime.strptime(last_irrigation, "%Y-%m-%d %H:%M:%S")  
                     time_difference = (current_time - last_irrigation_time).total_seconds() / 60  # Differenza in minuti
-                    print(f"🕒 Last irrigation for {smartpot_id}: {last_irrigation_time}")
-                    print(f"⏳ Time since last irrigation: {time_difference:.1f} minutes")
-
                     if time_difference < 5:
-                        print(f"⏳ Skipping irrigation for {smartpot_id}: Last irrigation was {time_difference:.1f} minutes ago.")
                         return  # Evita l'irrigazione se non sono trascorsi 5 minuti
 
             except Exception as e:
-                print(f"⚠️ Error retrieving last_irrigation for {smartpot_id}: {e}")
+                print(f"Error retrieving last_irrigation for {smartpot_id}: {e}")
 
             # **Se i 5 minuti sono passati, attiva l'irrigazione**
             irrigation_msg = json.dumps({
                 "smartpot_id": smartpot_id
             })
             sqs.send_message(QueueUrl=SQS_IRRIGATION_QUEUE, MessageBody=irrigation_msg)
-            print(f"💧 Sent irrigation trigger for {smartpot_id}")
 
         elif soil_moisture_value > limits["soil_moisture_max"]:
             # **Se il valore è troppo alto, invia un alert**
@@ -217,14 +189,13 @@ def check_and_trigger(sensor_data: SensorData):
                 "details": {"soil_moisture": sensor_data.soil_moisture}
             })
             sqs.send_message(QueueUrl=SQS_ALERTS_QUEUE, MessageBody=alert_msg)
-            print(f"⚠️ Sent high soil moisture alert for {smartpot_id}")
 
     except ValueError:
-        print(f"❌ Skipping soil moisture check for {smartpot_id}: Invalid value '{sensor_data.soil_moisture}'")
+        print(f"Skipping soil moisture check for {smartpot_id}: Invalid value '{sensor_data.soil_moisture}'")
 
 
 def lambda_handler(event, context):
-    """AWS Lambda entry point."""
+    """AWS Lambda entry point that processes incoming sensor data from a Kinesis stream."""
     os.putenv("TZ", "Europe/Rome")
     time.tzset()
 
@@ -239,6 +210,4 @@ def lambda_handler(event, context):
             check_and_trigger(sensor_data)
 
         except Exception as e:
-            print(f"❌ Error processing record: {e}")
-
-    print(f"✅ Processed {len(event['Records'])} records.")
+            print(f"Error processing record: {e}")

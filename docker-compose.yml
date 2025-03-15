@@ -5,43 +5,36 @@ services:
     container_name: "${LOCALSTACK_DOCKER_NAME:-localstack-smartpotsystem}"
     image: localstack/localstack
     ports:
-      - "4566:4566"            # Porta principale per AWS mockato
-      - "4510-4559:4510-4559"  # Range per altri servizi AWS
+      - "4566:4566"  # Main port for LocalStack services
     environment:
-      - DEBUG=${DEBUG:-0}
-      - SERVICES=iam,s3,sqs,lambda,dynamodb,kinesis,events,apigateway,logs  # Servizi LocalStack
+      - DEBUG=${DEBUG:-0}  # Enable debug mode if needed
+      - SERVICES=iam,s3,sqs,lambda,dynamodb,kinesis,events,apigateway,logs  # AWS services to be emulated
       - LOCALSTACK_HOST=localhost
-      - GATEWAY_LISTEN=0.0.0.0:4566
-      - AWS_ACCESS_KEY_ID=test
+      - GATEWAY_LISTEN=0.0.0.0:4566  # API Gateway listening address
+      - AWS_ACCESS_KEY_ID=test  # Dummy AWS credentials for LocalStack
       - AWS_SECRET_ACCESS_KEY=test
     volumes:
-      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"  # Persistent storage for LocalStack
+      - "/var/run/docker.sock:/var/run/docker.sock"  # Enable Docker-in-Docker for LocalStack
     env_file:
-      - .env
+      - .env  # Load environment variables from a .env file
     networks:
-      - smartpotsystem-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
-      interval: 30s
-      timeout: 20s
-      retries: 5
+      - smartpotsystem-network  # Connects LocalStack to the SmartPotSystem network
 
   mosquitto:
     container_name: "mosquitto-broker"
-    image: eclipse-mosquitto
+    image: eclipse-mosquitto  # Official Eclipse Mosquitto MQTT broker
     ports:
-      - "1883:1883"  # Porta MQTT
-      - "9001:9001"  # Porta WebSocket (opzionale)
+      - "1883:1883"  # Default MQTT port for broker communication
+      - "9001:9001"  # WebSocket port (optional)
     volumes:
-      - "./mosquitto/config:/mosquitto/config"  # Configurazione Mosquitto
-      - "./mosquitto/data:/mosquitto/data"      # Dati persistenti Mosquitto
-      - "./mosquitto/log:/mosquitto/log"        # Log Mosquitto
+      - "./mosquitto/config:/mosquitto/config"  # Mosquitto configuration directory
+      - "./mosquitto/data:/mosquitto/data"  # Persistent MQTT message storage
+      - "./mosquitto/log:/mosquitto/log"  # Mosquitto logs directory
     networks:
-      - smartpotsystem-network
-    restart: always
+      - smartpotsystem-network  # Connects Mosquitto to the SmartPotSystem network
+    restart: always  # Ensures Mosquitto restarts in case of failure
 
 networks:
   smartpotsystem-network:
-    driver: bridge
-
+    driver: bridge  # Creates an isolated bridge network for SmartPotSystem services

@@ -17,7 +17,7 @@ DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE")
 # Initial Data for Smart Pots
 POTS_DATA = [
     {
-        "smartpot_id": {"S": "Fragola"},
+        "smartpot_id": {"S": "Strawberry"},
         "temperature": {"S": "20"},
         "humidity": {"S": "70"},
         "soil_moisture": {"S": "65"},
@@ -25,7 +25,7 @@ POTS_DATA = [
         "measure_date": {"S": "2025-02-23 11:30:00"}
     },
     {
-        "smartpot_id": {"S": "Basilico"},
+        "smartpot_id": {"S": "Basil"},
         "temperature": {"S": "22"},
         "humidity": {"S": "60"},
         "soil_moisture": {"S": "55"},
@@ -39,9 +39,9 @@ def populate_dynamodb():
     for pot in POTS_DATA:
         try:
             dynamodb.put_item(TableName=DYNAMODB_TABLE, Item=pot)
-            print(f"✅ Added {pot['smartpot_id']['S']} to {DYNAMODB_TABLE}")
+            print(f"Added {pot['smartpot_id']['S']} to {DYNAMODB_TABLE}")
         except Exception as e:
-            print(f"❌ Error adding {pot['smartpot_id']['S']} to {DYNAMODB_TABLE}: {e}")
+            print(f"Error adding {pot['smartpot_id']['S']} to {DYNAMODB_TABLE}: {e}")
 
 if __name__ == "__main__":
     populate_dynamodb()

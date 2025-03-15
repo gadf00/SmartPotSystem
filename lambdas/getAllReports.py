@@ -18,7 +18,10 @@ MANUAL_REPORTS_FOLDER = "reports/manual/"
 DAILY_REPORTS_FOLDER = "reports/daily/"
 
 def get_all_reports_keys():
-    """Retrieves the keys of all available reports (daily and manual) in the S3 bucket."""
+    """Retrieves a list of all report files (both daily and manual) stored in S3.
+       Searches under:reports/manual/ (for manual reports) and reports/daily/ (for daily reports)
+       Returns a list of report file names."""
+    
     reports = []
     for folder in [MANUAL_REPORTS_FOLDER, DAILY_REPORTS_FOLDER]:
         response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=folder)
@@ -27,10 +30,12 @@ def get_all_reports_keys():
     return reports if reports else None
 
 def get_all_reports(only_names=False):
-    """
-    Retrieves all stored reports.
-    If only_names=True, returns only the report names instead of full content.
-    """
+    """Fetches all stored reports from S3.
+       If only_names=True, returns only the file names.
+       If only_names=False, retrieves the full content of each report.
+       Formats the output to include: Report name (without folder prefix).Report type (manual or daily).
+       Full content (if requested)."""
+
     keys = get_all_reports_keys()
     if keys is not None:
         reports = []
@@ -50,6 +55,7 @@ def get_all_reports(only_names=False):
 
 def lambda_handler(event, context):
     """AWS Lambda entry point for retrieving all stored reports."""
+    
     os.putenv("TZ", "Europe/Rome")
     time.tzset()
     

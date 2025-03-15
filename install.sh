@@ -3,6 +3,8 @@
 # Clear previous configurations
 clear
 
+export AWS_PAGER=""
+
 # Load .env variables
 set -a
 source .env
@@ -19,11 +21,11 @@ region=${AWS_DEFAULT_REGION}
 echo "Default AWS region: $region"
 
 # **Creating S3 Bucket**
-echo "\nCreating S3 bucket: $S3_BUCKET"
+echo "Creating S3 bucket: $S3_BUCKET"
 awslocal s3api create-bucket --bucket $S3_BUCKET
 
 # **Creating DynamoDB Table**
-echo "\nCreating DynamoDB table: $DYNAMODB_TABLE"
+echo "Creating DynamoDB table: $DYNAMODB_TABLE"
 awslocal dynamodb create-table \
     --table-name $DYNAMODB_TABLE \
     --attribute-definitions AttributeName=smartpot_id,AttributeType=S \
@@ -32,7 +34,7 @@ awslocal dynamodb create-table \
     --region $region
 
 # **Creating SQS Queues**
-echo "\nCreating SQS queues"
+echo "Creating SQS queues"
 SmartPotQueueURL=$(awslocal sqs create-queue --queue-name $SQS_IRRIGATION_QUEUE --region $region | jq -r '.QueueUrl')
 SmartPotQueueARN=$(awslocal sqs get-queue-attributes --queue-url $SmartPotQueueURL --attribute-name QueueArn | jq -r '.Attributes.QueueArn')
 echo "SmartPotQueueARN: $SmartPotQueueARN"
@@ -42,13 +44,13 @@ AlertsQueueARN=$(awslocal sqs get-queue-attributes --queue-url $AlertsQueueURL -
 echo "AlertsQueueARN: $AlertsQueueARN"
 
 # **Creating Kinesis Stream**
-echo "\nCreating Kinesis stream: $KINESIS_STREAM"
+echo "Creating Kinesis stream: $KINESIS_STREAM"
 awslocal kinesis create-stream --stream-name $KINESIS_STREAM --shard-count 1 --region $region
 KinesisStreamARN=$(awslocal kinesis describe-stream --stream-name $KINESIS_STREAM --region $region | jq -r '.StreamDescription.StreamARN')
 echo "KinesisStreamARN: $KinesisStreamARN"
 
 # **Creating IAM Role for Lambda**
-echo "\nCreating IAM Role for Lambda"
+echo "Creating IAM Role for Lambda"
 Role=$(awslocal iam create-role --role-name $IAM_ROLE_NAME --assume-role-policy-document file://./roles/lambda_role.json)
 RoleARN=$(echo "$Role" | jq -r '.Role.Arn')
 echo "RoleARN: $RoleARN"
@@ -56,7 +58,7 @@ echo "RoleARN: $RoleARN"
 awslocal iam attach-role-policy --role-name $IAM_ROLE_NAME --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole
 
 # **Deploying Lambda Functions**
-echo "\nCreating Lambda Functions"
+echo "Creating Lambda Functions"
 
 mkdir -p ./tmpZips
 
@@ -131,7 +133,7 @@ awslocal lambda create-event-source-mapping \
     --batch-size 5
 
 # **Creating EventBridge Rule for Daily Report**
-echo "\nCreating EventBridge Rule for Daily Report"
+echo "Creating EventBridge Rule for Daily Report"
 
 awslocal events put-rule \
     --name scheduled-daily-report \
@@ -151,7 +153,7 @@ awslocal events put-targets \
     --region $region
 
 # Create API Gateway
-echo "\nCreating API Gateway"
+echo "Creating API Gateway"
 output_api=$(awslocal apigateway create-rest-api --name 'SmartPotSystem API Gateway' --region $region)
 api_id=$(echo $output_api | jq -r '.id')
 
@@ -197,18 +199,14 @@ done
 
 
 # Deploy API Gateway
-echo "\nDeploying API Gateway"
+echo "Deploying API Gateway"
 awslocal apigateway create-deployment \
     --rest-api-id $api_id \
     --stage-name test \
     --region $region
 
-AWS_GATEWAY_URL="http://localhost:4566/_aws/execute-api/$api_id/test/"
-echo "\n\nAPI Gateway URL: $AWS_GATEWAY_URL\n\n"
-echo "AWS_GATEWAY_URL=$AWS_GATEWAY_URL" >> ./.env
-
 # Grant API Gateway permissions to invoke Lambda functions
-echo "\nGranting API Gateway permissions to invoke Lambda functions"
+echo "Granting API Gateway permissions to invoke Lambda functions"
 
 for function_name in "${api_endpoints[@]}"; do
     echo "Granting permission to function: $function_name"
@@ -220,14 +218,12 @@ for function_name in "${api_endpoints[@]}"; do
         --source-arn "arn:aws:execute-api:$region:*:$api_id/test/*"
 done
 
-
-
 # **Deploy API Gateway**
-echo "\nDeploying API Gateway"
+echo "Deploying API Gateway"
 awslocal apigateway create-deployment --rest-api-id $api_id --stage-name test --region $region
 
 AWS_GATEWAY_URL="http://localhost:4566/_aws/execute-api/$api_id/test/"
-echo "\nAPI Gateway URL: $AWS_GATEWAY_URL"
+echo "API Gateway URL: $AWS_GATEWAY_URL"
 echo "AWS_GATEWAY_URL=$AWS_GATEWAY_URL" >> .env
 
 
@@ -237,5 +233,5 @@ rm -f ./tmpZips/.DS_Store
 rmdir ./tmpZips
 
 # **Populate DynamoDB**
-echo "\nPopulating DynamoDB"
+echo "Populating DynamoDB"
 python3 ./usefulScripts/populateDB.py

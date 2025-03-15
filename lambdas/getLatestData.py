@@ -14,6 +14,7 @@ dynamodb = boto3.client("dynamodb", endpoint_url=ENDPOINT_URL, region_name=AWS_R
 
 def get_latest_data():
     """Fetches the latest data from DynamoDB for each pot and returns structured JSON."""
+
     try:
         # Scan the table for all available records
         response = dynamodb.scan(TableName=DYNAMODB_TABLE)
@@ -29,7 +30,7 @@ def get_latest_data():
         pots_data = []
         for item in response["Items"]:
             pots_data.append({
-                "smartpot_id": item["smartpot_id"]["S"],  # Pot identifier (e.g., Fragola, Basilico)
+                "smartpot_id": item["smartpot_id"]["S"], 
                 "temperature": item["temperature"]["S"],
                 "humidity": item["humidity"]["S"],
                 "soil_moisture": item["soil_moisture"]["S"],
@@ -53,4 +54,5 @@ def get_latest_data():
 
 def lambda_handler(event, context):
     """Handles API Gateway request to fetch the latest pot data."""
+    
     return get_latest_data()

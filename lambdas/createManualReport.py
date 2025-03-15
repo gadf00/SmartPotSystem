@@ -21,12 +21,17 @@ RAW_FOLDER = "raw/"
 REPORT_FOLDER = "reports/manual/"
 
 def calculate_average(values):
-    """Calculates the average ignoring 'ERR' values."""
+    """Computes the average value from a list while ignoring 'ERR' values.
+       Returns None if there are no valid values."""
+
     numeric_values = [v for v in values if isinstance(v, (int, float))]
     return round(sum(numeric_values) / len(numeric_values), 2) if numeric_values else None
 
 def get_event_data(smartpot_id, start_time, end_time):
-    """Retrieves event data from S3 for a specific SmartPot within the given time range."""
+    """Retrieves event data from S3 for a given SmartPot and time range.
+       Filters events like sensor errors, temperature/humidity alerts, and irrigation status.
+       Returns a dictionary with event counts."""
+
     event_file_path = f"events/daily_events_{smartpot_id}.json"
 
     try:
@@ -40,7 +45,8 @@ def get_event_data(smartpot_id, start_time, end_time):
             "humidity_high": 0,
             "humidity_low": 0,
             "soil_moisture_high": 0,
-            "irrigation_triggered": 0
+            "irrigation_completed": 0,
+            "irrigation_error": 0
         }
 
     # Filtra eventi nell'intervallo di tempo specificato
@@ -51,7 +57,8 @@ def get_event_data(smartpot_id, start_time, end_time):
         "humidity_high": 0,
         "humidity_low": 0,
         "soil_moisture_high": 0,
-        "irrigation_triggered": 0
+        "irrigation_completed": 0,
+        "irrigation_error": 0
     }
 
     for event in events:
@@ -64,7 +71,11 @@ def get_event_data(smartpot_id, start_time, end_time):
     return event_counts
 
 def generate_manual_report(smartpot_id, start_hour, end_hour):
-    """Generates a manual report for a given time range, handling multi-day intervals."""
+    """Generates a manual report for a given SmartPot and time interval.
+    Extracts raw temperature, humidity, and soil moisture values from S3.
+    Computes averages and aggregates event data.
+    Returns the final report data."""
+
     current_date = datetime.now().strftime("%Y-%m-%d")
     previous_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -116,7 +127,7 @@ def generate_manual_report(smartpot_id, start_hour, end_hour):
                     report_data["soil_moisture"].append(float(record["soil_moisture"]))
 
         except s3.exceptions.NoSuchKey:
-            print(f"⚠️ No data found for {smartpot_id} on {date}")
+            print(f"No data found for {smartpot_id} on {date}")
 
     if not data_found:
         return None
@@ -139,6 +150,7 @@ def generate_manual_report(smartpot_id, start_hour, end_hour):
 
 def lambda_handler(event, context):
     """AWS Lambda handler function to create the manual report."""
+    
     os.putenv("TZ", "Europe/Rome")
     time.tzset()
 
@@ -162,8 +174,7 @@ def lambda_handler(event, context):
                 reports.append(report)
                 report_filename = f"{REPORT_FOLDER}manual_report_{smartpot_id}_{start_hour}-{end_hour}_{datetime.now().strftime('%Y-%m-%d')}.json"
         else:
-            print("ℹ️ Generating reports for all SmartPots.")
-            for smartpot in ["Fragola", "Basilico"]:
+            for smartpot in ["Strawberry", "Basil"]:
                 report = generate_manual_report(smartpot, start_hour, end_hour)
                 if report:
                     reports.append(report)

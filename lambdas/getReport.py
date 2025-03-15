@@ -15,6 +15,7 @@ s3 = boto3.client("s3", endpoint_url=ENDPOINT_URL, region_name=AWS_REGION)
 
 def get_file_from_name(name: str):
     """Check if a specific file exists and retrieve it, first from 'daily/' then from 'manual/'."""
+    
     for folder in ["reports/daily/", "reports/manual/"]:
         response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=folder)
         if 'Contents' in response:

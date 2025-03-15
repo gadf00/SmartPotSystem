@@ -27,19 +27,21 @@ queue_url = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)["QueueUrl"]
 http = urllib3.PoolManager()
 
 def send_telegram_message(message_text):
-    """Sends a notification message via Telegram."""
+    """Sends a notification message to a Telegram chat using the Telegram Bot API."""
     payload = {
         "text": message_text,
         "chat_id": TELEGRAM_CHAT_ID
     }
     try:
         http.request('POST', TELEGRAM_URL, body=json.dumps(payload), headers={'Content-Type': 'application/json'})
-        print(f"✅ Telegram message sent: {message_text}")
     except Exception as e:
-        print(f"❌ Error sending Telegram notification: {e}")
+        print(f"Error sending Telegram notification: {e}")
 
 def save_event(smartpot_id, alert_type):
-    """Saves an event with a timestamp in S3 for a specific SmartPot."""
+    """Saves an event in an S3 file.
+       Maintains a history of alerts in events/daily_events_<smartpot_id>.json.
+       Appends new events with a timestamp."""
+
     event_file_path = f"events/daily_events_{smartpot_id}.json"
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -55,16 +57,17 @@ def save_event(smartpot_id, alert_type):
 
     # Save updated events to S3
     s3.put_object(Bucket=S3_BUCKET, Key=event_file_path, Body=json.dumps(events))
-    print(f"✅ Event saved in S3 for {smartpot_id}: {alert_type} at {current_time}")
 
 def process_alert(alert_message):
-    """Processes the alert message received from SQS and sends a Telegram notification."""
+    """Processes an incoming alert message from an SQS queue.
+       Sends the formatted message to Telegram.
+       Saves the alert event in S3 for tracking."""
+
     smartpot_id = alert_message.get("smartpot_id", "ALL")
     alert_type = alert_message.get("issue")
     details = alert_message.get("details", {})
 
     if not smartpot_id:
-        print("❌ Error: smartpot_id missing in alert message.")
         return
 
     # **Usa direttamente il messaggio fornito per `daily_report` e `manual_report`**
@@ -93,6 +96,9 @@ def process_alert(alert_message):
         
         elif alert_type == "irrigation_completed":
             message = f"💧 Irrigation completed for SmartPot {smartpot_id}."
+        
+        elif alert_type == 'irrigation_error':
+            message = f"💧 Irrigation error for SmartPot {smartpot_id}."
 
         elif alert_type == "soil_moisture_high":
             message = f"🌱 High soil moisture alert in SmartPot {smartpot_id}.\n💧 Moisture Level: {details.get('soil_moisture', 'N/A')}% (Above max limit)."
@@ -105,10 +111,10 @@ def process_alert(alert_message):
 
     # **Invio del messaggio Telegram**
     send_telegram_message(message)
-    print(f"📢 Alert processed: {alert_type} for {smartpot_id}")
 
 def lambda_handler(event, context):
     """AWS Lambda handler function to process alerts from SQS and send Telegram notifications."""
+    
     os.putenv("TZ", "Europe/Rome")
     time.tzset()
 
@@ -116,7 +122,6 @@ def lambda_handler(event, context):
         if "Records" in event:
             for record in event["Records"]:
                 alert_message = json.loads(record["body"])
-                print(f"📥 Processing alert: {alert_message}")
                 process_alert(alert_message)
         
         return {
@@ -125,7 +130,7 @@ def lambda_handler(event, context):
         }
 
     except Exception as e:
-        print(f"❌ Error in handleAlerts: {e}")
+        print(f"Error in handleAlerts: {e}")
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})

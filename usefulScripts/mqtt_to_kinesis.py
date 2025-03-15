@@ -10,8 +10,8 @@ KINESIS_STREAM_NAME = "SmartPotSensors"
 
 # Dizionario per tenere traccia dei dati ricevuti
 sensor_data = {
-    "Fragola": {"temperature": None, "humidity": None, "soil_moisture": None},
-    "Basilico": {"temperature": None, "humidity": None, "soil_moisture": None},
+    "Strawberry": {"temperature": None, "humidity": None, "soil_moisture": None},
+    "Basil": {"temperature": None, "humidity": None, "soil_moisture": None},
 }
 
 # Funzione per inviare i dati a Kinesis
@@ -61,12 +61,12 @@ def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to MQTT Broker")
         # Sottoscrizione ai topic per entrambi i vasi
-        for plant in ["Fragola", "Basilico"]:
+        for plant in ["Strawberry", "Basil"]:
             client.subscribe(f"{plant}_Temp")
             client.subscribe(f"{plant}_Hum")
             client.subscribe(f"{plant}_Soil")
     else:
-        print(f"⚠️ Connection failed with result code {rc}")
+        print(f"Connection failed with result code {rc}")
 
 # Funzione callback per gestire disconnessioni
 def on_disconnect(client, userdata, rc):

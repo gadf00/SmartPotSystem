@@ -2,12 +2,12 @@
 #include <PubSubClient.h>
 #include <DHT.h>
 
-#define DEVICE_ID "Fragola"
-#define DHTPIN 4          // Pin del DHT22
-#define SOIL_MOISTURE_PIN 36  // Pin analogico per il Soil Moisture Sensor
+#define DEVICE_ID "Strawberry"
+#define DHTPIN 4
+#define SOIL_MOISTURE_PIN 36
 
-#define DRY_VALUE 4095   // Valore massimo (suolo asciutto)
-#define WET_VALUE 0      // Valore minimo (suolo bagnato)
+#define DRY_VALUE 4000  // dry ground
+#define WET_VALUE 100      // wet ground
 
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
@@ -18,9 +18,9 @@ const char* password = "FamigliaDeFilippo";
 const char* mqtt_server = "192.168.1.106";
 
 // MQTT Topics
-const char* topic_temp = "Fragola_Temp";
-const char* topic_hum = "Fragola_Hum";
-const char* topic_soil = "Fragola_Soil";
+const char* topic_temp = "Strawberry_Temp";
+const char* topic_hum = "Strawberry_Hum";
+const char* topic_soil = "Strawberry_Soil";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -65,12 +65,11 @@ void loop() {
     }
     client.loop();
 
-    // Lettura sensori
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
     int soilMoisture = analogRead(SOIL_MOISTURE_PIN);
 
-    // Calcolo umidità del suolo in percentuale
+    // Soil moisture percentage calculation
     int soilMoisturePercent = 100 - ((soilMoisture - WET_VALUE) * 100 / (DRY_VALUE - WET_VALUE));
     soilMoisturePercent = constrain(soilMoisturePercent, 0, 100);  // Limita tra 0% e 100%
 
@@ -79,7 +78,7 @@ void loop() {
     bool humError = false;
     bool soilError = false;
 
-    // Controllo errori per DHT22
+    // Error control
     if (isnan(temperature) || temperature < 5 || temperature > 70) {
         tempError = true;
         Serial.println("Error, Temperature out of bounds!");
@@ -90,12 +89,12 @@ void loop() {
         Serial.println("Error, Humidity out of bounds!");
     }
 
-    if (soilMoisture < 0 || soilMoisture > 4095) { // Range tipico ESP32 ADC 12-bit
+    if (soilMoisture =< 0 || soilMoisture >= 4095) {
         soilError = true;
         Serial.println("Error, Soil Moisture out of bounds!");
     }
 
-    // Invio dati a MQTT
+    // Send Data to MQTT
     if (tempError) {
         client.publish(topic_temp, "{\"smartpot_id\": \"" DEVICE_ID "\", \"temperature\": \"ERR\"}");
         Serial.println("Published: Temperature ERR");
@@ -123,5 +122,5 @@ void loop() {
         Serial.println("Published: " + soilPayload);
     }
 
-    delay(15000);  // Pubblica ogni 15 secondi
+    delay(15000);
 }

@@ -22,27 +22,30 @@ REPORT_FOLDER = "reports/daily/"
 EVENTS_FOLDER = "events/"
 
 def calculate_average(values):
-    """Calculates the average ignoring 'ERR' values."""
+    """Computes the average of valid numerical values, ignoring 'ERR' values.
+       Returns None if there are no valid values."""
+
     numeric_values = [float(v) for v in values if v != "ERR"]
     return round(sum(numeric_values) / len(numeric_values), 2) if numeric_values else None
 
 def delete_s3_folder(prefix):
-    """Deletes all objects in an S3 folder."""
+    """Deletes all objects in a specific S3 folder (used to clear raw data after generating daily reports)."""
+    
     objects = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
     if "Contents" in objects:
         delete_keys = [{"Key": obj["Key"]} for obj in objects["Contents"]]
         s3.delete_objects(Bucket=S3_BUCKET, Delete={"Objects": delete_keys})
-        print(f"🗑️ Deleted {len(delete_keys)} objects from {prefix}")
 
 def get_event_data(smartpot_id):
     """Retrieves all event timestamps from S3 for a specific SmartPot."""
+
     event_file_path = f"{EVENTS_FOLDER}daily_events_{smartpot_id}.json"
 
     try:
         obj = s3.get_object(Bucket=S3_BUCKET, Key=event_file_path)
         event_records = json.loads(obj["Body"].read().decode("utf-8"))
     except s3.exceptions.NoSuchKey:
-        print(f"ℹ️ No event file found for {smartpot_id}. Returning empty list.")
+        print(f"No event file found for {smartpot_id}. Returning empty list.")
         event_records = []
 
     # Aggrega gli eventi in base al tipo
@@ -53,7 +56,8 @@ def get_event_data(smartpot_id):
         "humidity_high": 0,
         "humidity_low": 0,
         "soil_moisture_high": 0,
-        "irrigation_triggered": 0
+        "irrigation_completed": 0,
+        "irrigation_error": 0
     }
 
     for event in event_records:
@@ -65,13 +69,13 @@ def get_event_data(smartpot_id):
 
 def generate_daily_report():
     """Generates a daily report based on the raw data available in S3, grouped by SmartPot."""
+    
     current_date = datetime.now().strftime("%Y-%m-%d")
     report_data = {}
 
     # Retrieve all RAW files from S3
     raw_files = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=RAW_FOLDER)
     if "Contents" not in raw_files:
-        print("⚠️ No raw data found in S3. Report not generated.")
         return False  # Indica che il report non è stato generato
 
     # Process each raw data file
@@ -106,7 +110,6 @@ def generate_daily_report():
                 report_data[smartpot_id]["soil_moisture"].append(float(record["soil_moisture"]))
 
     if not report_data:
-        print("⚠️ No valid data found in S3. Sending SQS alert.")
         alert_message = {
             "smartpot_id": "ALL",
             "issue": "daily_report",
@@ -139,8 +142,6 @@ def generate_daily_report():
         Body=json.dumps(final_report, indent=4)
     )
 
-    print(f"✅ Daily report generated and saved: {report_filename}")
-
     # Send notification via handleAlerts
     alert_message = {
         "smartpot_id": "ALL",
@@ -167,7 +168,7 @@ def lambda_handler(event, context):
             "body": json.dumps("Daily report successfully generated." if generated else "No valid sensor data found.")
         }
     except Exception as e:
-        print(f"❌ Error in createDailyReport: {e}")
+        print(f"Error in createDailyReport: {e}")
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})
