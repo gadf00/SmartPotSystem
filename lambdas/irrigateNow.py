@@ -54,6 +54,7 @@ def send_irrigation_command(smartpot_id):
     client.subscribe(MQTT_TOPIC_CONFIRM, qos=2)
     payload = json.dumps({"smartpot_id": smartpot_id, "action": "start"})
     client.publish(MQTT_TOPIC_COMMAND, payload, qos=2)
+    send_alert(smartpot_id,"irrigation_triggered")
 
 def update_last_irrigation(smartpot_id):
     """Updates the last_irrigation timestamp in DynamoDB for the given SmartPot."""

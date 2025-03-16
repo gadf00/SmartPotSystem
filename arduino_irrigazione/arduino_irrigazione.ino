@@ -3,11 +3,11 @@
 #include <ArduinoJson.h>
 
 // WiFi Configuration
-const char* ssid = "TIM_FWA_1";
-const char* password = "FamigliaDeFilippo";
+const char* ssid = "";
+const char* password = "";
 
 // MQTT Configuration
-const char* mqtt_server = "192.168.1.106";
+const char* mqtt_server = "";
 const int mqtt_port = 1883;
 const char* mqtt_topic_command = "Irrigation_Command";
 const char* mqtt_topic_confirm = "Irrigation_Confirm";

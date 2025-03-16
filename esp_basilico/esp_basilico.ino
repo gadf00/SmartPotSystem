@@ -13,9 +13,9 @@
 DHT dht(DHTPIN, DHTTYPE);
 
 // WiFi e MQTT
-const char* ssid = "TIM_FWA_1";
-const char* password = "FamigliaDeFilippo";
-const char* mqtt_server = "192.168.1.106";
+const char* ssid = "";
+const char* password = "";
+const char* mqtt_server = "";
 
 // MQTT Topics
 const char* topic_temp = "Basil_Temp";

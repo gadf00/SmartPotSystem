@@ -9,8 +9,8 @@ KINESIS_STREAM_NAME = "SmartPotSensors"
 
 # Dati predefiniti per i sensori
 default_sensor_data = {
-    "Strawberry": {"temperature": "14", "humidity": "60", "soil_moisture": "10"},
-    "Basil": {"temperature": "14", "humidity": "60", "soil_moisture": "10"},
+    "Strawberry": {"temperature": "10", "humidity": "60", "soil_moisture": "60"},
+    "Basil": {"temperature": "25", "humidity": "60", "soil_moisture": "ERR"},
 }
 
 def send_to_kinesis(smartpot_id, data):
@@ -34,8 +34,9 @@ def send_to_kinesis(smartpot_id, data):
 
 # Loop per inviare dati ogni 5 secondi
 while True:
+    print("⏳ Waiting 15 seconds before sending new data...")
+    time.sleep(15)
     for smartpot, data in default_sensor_data.items():
         send_to_kinesis(smartpot, data)
     
-    print("⏳ Waiting 15 seconds before sending new data...")
-    time.sleep(15)
+
