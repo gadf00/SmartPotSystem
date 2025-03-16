@@ -1,6 +1,7 @@
 <h1>🌱 SmartPot System</h1>
 <p><strong>SmartPot System</strong> is a simple yet complete project designed to simulate an automated plant irrigation system capable of self-maintenance. It was developed as part of the <strong>Serverless Computing for IoT</strong> course during the Computer Science Master's Degree program at <strong>UNISA</strong>.</p>
 <h1>Architecture</h1>
+<img src="images/ScIoT%20Architecture.png" alt="Architecture">
 <p>The architecture consists of several services working independently but in sync to let the system work as a whole. In the setting presented here, the system is composed of 2 pots and ideally each pot contains a single species of plant (Basil and Strawberry).</p>
 <p>The system is composed of two SmartPots, each consisting of an ESP32 equipped with a DHT22 sensor that captures environmental values such as temperature and humidity, and a soil moisture sensor that monitors the soil's humidity percentage.</p>
 <p>Using two sketches (esp_fragola and esp_basilico), the ESP32 devices send their data to an MQTT broker via the following topics:</p>
