@@ -112,12 +112,32 @@ MQTT_TOPIC_CONFIRM=Irrigation_Confirm
 ```bash
 source .env
 ```
-
-<p>Install the dependencies for the Telegram Bot.</p>
+<p>Create a virtual environment and install AwsLocal boto3 and paho-mqtt.</p>
 
 ```bash
 pip install -r ./bot/requirements.txt
 ```
+
+<p>Install the dependencies for the Telegram Bot.</p>
+
+```bash
+python3 -m venv esame
+source esame/bin/activate
+pip install --upgrade pip
+pip install awscli-local boto3 paho-mqtt python-dotenv
+```
+
+<p>Check your IP address.</p>
+
+```bash
+ip a
+```
+<p>Replace these values with your in the filesfile: arduino_irrigazione, esp_basilico, esp_fragola</p>
+<ul>
+  <li>const char* ssid = "";</li>
+  <li>const char* password = "";</li>
+  <li>const char* mqtt_server = "";</li>
+</ul>
 
 <p>Start the Localstack Docker image.</p>
 
