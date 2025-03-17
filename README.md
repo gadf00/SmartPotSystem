@@ -169,5 +169,12 @@ chmod +x ./usefulScripts/mqtt_to_kinesis.py
 ./usefulScripts/mqtt_to_kinesis.py
 ```
 
+<p>You can check the logs of a lambda function with this command.</p>
+
+```bash
+aws logs tail /aws/lambda/yourLambdaFunction --endpoint-url http://localhost:4566 --follow
+
+```
+
 <h1>Future developments</h1>
 <p>Future improvements include the development of a web application for real-time monitoring, the integration of machine learning for predictive irrigation, and the use of advanced analytics to optimize plant health and resource usage.</p>
