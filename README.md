@@ -27,8 +27,8 @@ The irrigateNow Lambda function waits up to 10 seconds for this confirmation. Wh
   <li><strong>createDailyReport</strong>: triggered daily via EventBridge, it calculates daily averages for temperature, humidity, and soil moisture, includes event counts (e.g., temperature_high alerts), and stores the report in S3.</li>
   <li><strong>createManualReport</strong>: similar to createDailyReport, but can be triggered via API Gateway, specifying a start_hour and end_hour to focus on a specific time range.</li>
   <li><strong>getLatestSensorData</strong>: fetches the latest sensor data from DynamoDB via API Gateway.</li>
-  <li><strong>getReport</strong>: retrieves a specific report by name or lists all report names available in S3, via API Gateway.</li>
-  <li><strong>getAllReports</strong>: returns the full content of all reports stored in the S3 bucket, via API Gateway.</li>
+  <li><strong>getReport</strong>: retrieves a specific report by name available in S3, via API Gateway.</li>
+  <li><strong>getAllReports</strong>: return the lists of all report names or the full content of all reports stored in the S3 bucket, via API Gateway.</li>
   <li><strong>handleAlerts</strong>: specialized in handling messages from SmartPotAlertsQueue (SQS). Based on the issue type, it sends a Telegram notification via bot and logs the alert timestamp in S3 for tracking purposes.</li>
 </ul>
 
