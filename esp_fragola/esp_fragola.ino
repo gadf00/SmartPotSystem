@@ -99,7 +99,7 @@ void loop() {
         client.publish(topic_temp, "{\"smartpot_id\": \"" DEVICE_ID "\", \"temperature\": \"ERR\"}");
         Serial.println("Published: Temperature ERR");
     } else {
-        String tempPayload = "{\"smartpot_id\": \"" + String(DEVICE_ID) + "\", \"temperature\": \"" + String(25) + "\"}";
+        String tempPayload = "{\"smartpot_id\": \"" + String(DEVICE_ID) + "\", \"temperature\": \"" + String(temperature) + "\"}";
         client.publish(topic_temp, tempPayload.c_str());
         Serial.println("Published: " + tempPayload);
     }
@@ -108,7 +108,7 @@ void loop() {
         client.publish(topic_hum, "{\"smartpot_id\": \"" DEVICE_ID "\", \"humidity\": \"ERR\"}");
         Serial.println("Published: Humidity ERR");
     } else {
-        String humPayload = "{\"smartpot_id\": \"" + String(DEVICE_ID) + "\", \"humidity\": \"" + String(60) + "\"}";
+        String humPayload = "{\"smartpot_id\": \"" + String(DEVICE_ID) + "\", \"humidity\": \"" + String(humidity) + "\"}";
         client.publish(topic_hum, humPayload.c_str());
         Serial.println("Published: " + humPayload);
     }
@@ -117,7 +117,7 @@ void loop() {
         client.publish(topic_soil, "{\"smartpot_id\": \"" DEVICE_ID "\", \"soil_moisture\": \"ERR\"}");
         Serial.println("Published: Soil Moisture ERR");
     } else {
-        String soilPayload = "{\"smartpot_id\": \"" + String(DEVICE_ID) + "\", \"soil_moisture\": \"" + String(45) + "\"}";
+        String soilPayload = "{\"smartpot_id\": \"" + String(DEVICE_ID) + "\", \"soil_moisture\": \"" + String(soilMoisturePercent) + "\"}";
         client.publish(topic_soil, soilPayload.c_str());
         Serial.println("Published: " + soilPayload);
     }
