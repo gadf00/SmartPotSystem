@@ -1,5 +1,5 @@
 <h1>🌱 SmartPot System</h1>
-<p><strong>SmartPot System</strong> is a simple yet complete project designed to simulate an automated plant irrigation system capable of self-maintenance. It was developed as part of the <strong>Serverless Computing for IoT</strong> course during the Computer Science Master's Degree program at <strong>UNISA</strong>.</p>
+<p><strong>SmartPot System</strong> is a simple yet complete project designed to simulate an automated plant irrigation system capable of almost completely self-maintaining. It was developed as part of the <strong>Serverless Computing for IoT</strong> course during the Computer Science Master's Degree program at <strong>UNISA</strong>.</p>
 <h1>Architecture</h1>
 <img src="images/ScIoT%20Architecture.png" alt="Architecture">
 <p>The architecture consists of several services working independently but in sync to let the system work as a whole. In the setting presented here, the system is composed of 2 pots and ideally each pot contains a single species of plant (Basil and Strawberry).</p>
@@ -10,17 +10,17 @@
   <li>Strawberry_Temp, Strawberry_Hum, Strawberry_Soil</u>
 </ul>
 <p>A Python script subscribes to these topics, collects the data, and forwards it to a Kinesis stream, capable of efficiently handling high-throughput data. Theoretically, the sensors could be configured to send hundreds of readings per second.</p>
-<p>The Kinesis stream triggers a Lambda function called ProcessSensorData, which performs the following operations:</p>
+<p>The Kinesis stream triggers a Lambda function called processSensorData, which performs the following operations:</p>
 <ul>
   <li>Validates sensor readings for each SmartPot and each sensor type against predefined thresholds.</li>
   <li>Saves the data in DynamoDB.</li>
   <li>Stores the raw data in an S3 bucket, excluding any records containing "ERR" values.</li>
   <li>If any value exceeds its defined threshold, it sends a message to the SmartPotAlertsQueue (SQS) specifying the type of issue (e.g., temperature below limits).</li>
-  <li>If the soil moisture value is below threshold, it sends a message to the SmartPotIrrigationQueue (SQS) to initiate irrigation.</li>
+  <li>If the soil moisture value is below threshold, it sends a message to the SmartPotIrrigationQueue (SQS) to initiate irrigation. It cannot send a message to this queue if the last irrigation occured in the last 5 minutes</li>
 </ul>
-<p>At this point, another Lambda function, IrrigateNow, is triggered by the SQS message. It sends an irrigation command via the MQTT topic Irrigation_Command. An Arduino UNO Rev4 equipped with a 2-channel relay activates one of two water pumps depending on whether it needs to irrigate Basilico or Fragola.</p>
+<p>At this point, another Lambda function, irrigateNow, is triggered by the SQS message. It sends an irrigation command via the MQTT topic Irrigation_Command. An Arduino UNO Rev4 equipped with a 2-channel relay activates one of two water pumps depending on whether it needs to irrigate Basil or Strawberry.</p>
 <p>Once the Arduino receives the command, it activates the appropriate pump and, upon completion, sends a confirmation message on the MQTT topic Irrigation_Confirm.
-The IrrigateNow Lambda function waits up to 10 seconds for this confirmation. When received, it updates the last_irrigation field in DynamoDB and sends a notification via the SmartPotAlertsQueue (SQS).</p>
+The irrigateNow Lambda function waits up to 10 seconds for this confirmation. When received, it updates the last_irrigation field in DynamoDB and sends a notification via the SmartPotAlertsQueue (SQS).</p>
 <p>Additionally, this function can be invoked manually via an API Gateway.</p>
 <p>Other Lambda functions available in the system include:</p>
 <ul>
@@ -115,16 +115,17 @@ source .env
 <p>Create a virtual environment and install AwsLocal boto3 and paho-mqtt.</p>
 
 ```bash
-pip install -r ./bot/requirements.txt
+
+python3 -m venv esame
+source esame/bin/activate
+pip install --upgrade pip
+pip install awscli-local boto3 paho-mqtt python-dotenv
 ```
 
 <p>Install the dependencies for the Telegram Bot.</p>
 
 ```bash
-python3 -m venv esame
-source esame/bin/activate
-pip install --upgrade pip
-pip install awscli-local boto3 paho-mqtt python-dotenv
+pip install -r ./bot/requirements.txt
 ```
 
 <p>Check your IP address.</p>
@@ -132,7 +133,7 @@ pip install awscli-local boto3 paho-mqtt python-dotenv
 ```bash
 ip a
 ```
-<p>Replace these values with your in the filesfile: arduino_irrigazione, esp_basilico, esp_fragola</p>
+<p>Replace these values with yours in the files: arduino_irrigazione, esp_basilico, esp_fragola</p>
 <ul>
   <li>const char* ssid = "";</li>
   <li>const char* password = "";</li>
@@ -146,6 +147,17 @@ docker-compose up
 ```
 
 <h3>Automated install</h3>
+<p>If you want to change the time when the daily report is created with EventBridge you need to change this part of the code in the install.sh file. Actually the EventBridge triggers the createDailyReport at 12:50 (UTC).</p>
+
+```bash
+# **Creating EventBridge Rule for Daily Report**
+echo "Creating EventBridge Rule for Daily Report"
+
+awslocal events put-rule \
+    --name scheduled-daily-report \
+    --schedule-expression 'cron(50 12 * * ? *)' \
+    --region $region
+```
 <p>Launch the script to create all the AWS architecture described above on the local Localstack instance.</p>
 
 ```bash
@@ -177,4 +189,4 @@ aws logs tail /aws/lambda/yourLambdaFunction --endpoint-url http://localhost:456
 ```
 
 <h1>Future developments</h1>
-<p>Future improvements include the development of a web application for real-time monitoring, the integration of machine learning for predictive irrigation, and the use of advanced analytics to optimize plant health and resource usage.</p>
+<p>Future improvements include the development of a web application for real-time monitoring, the integration of machine learning for predictive irrigation, and the use of advanced analytics to optimize plant health and resource usage.Additionally, the system could be fully automated by enabling self-management capabilities when temperature and humidity exceed predefined thresholds, through the integration of specific actuators for climate control.</p>
