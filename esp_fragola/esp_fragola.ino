@@ -89,7 +89,7 @@ void loop() {
         Serial.println("Error, Humidity out of bounds!");
     }
 
-    if (soilMoisture =< 0 || soilMoisture >= 4095) {
+    if (soilMoisture <= 0 || soilMoisture >= 4095) {
         soilError = true;
         Serial.println("Error, Soil Moisture out of bounds!");
     }
