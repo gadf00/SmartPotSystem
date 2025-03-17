@@ -101,7 +101,8 @@ def check_and_trigger(sensor_data: SensorData):
     """Checks if sensor values exceed defined thresholds and triggers alerts and irrigation."""
     smartpot_id = sensor_data.smartpot_id
     limits = PLANT_LIMITS.get(smartpot_id, {})
-
+    current_time = datetime.now()
+    
     # **Gestione errori sensori**
     if "ERR" in [sensor_data.temperature, sensor_data.humidity, sensor_data.soil_moisture]:
         alert_msg = json.dumps({
